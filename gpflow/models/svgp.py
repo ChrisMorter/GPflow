@@ -77,6 +77,18 @@ class SVGP(GPModel, ExternalDataTrainingLossMixin):
         num_inducing = len(self.inducing_variable)
         self._init_variational_parameters(num_inducing, q_mu, q_sqrt, q_diag)
 
+    @property
+    def q_mu(self):
+        q_mu = tf.concat([self.q_mu_1, self.q_mu_2], axis=1)
+        assert q_mu.shape == (800, 2), f"Unexpected shape {q_mu.shape}"
+        return q_mu  # [M, 2]
+
+    @property
+    def q_sqrt(self):
+        q_sqrt = tf.stack([self.q_sqrt_1, self.q_sqrt_2])
+        assert q_sqrt.shape == (2, 800, 800), f"Unexpected shape {q_sqrt.shape}"
+        return q_sqrt  # [2, M, M]
+
     def _init_variational_parameters(self, num_inducing, q_mu, q_sqrt, q_diag):
         """
         Constructs the mean and cholesky of the covariance of the variational Gaussian posterior.
@@ -105,19 +117,19 @@ class SVGP(GPModel, ExternalDataTrainingLossMixin):
             `q_sqrt` is two dimensional and only holds the square root of the
             covariance diagonal elements. If False, `q_sqrt` is three dimensional.
         """
-        q_mu = np.zeros((num_inducing, self.num_latent_gps)) if q_mu is None else q_mu
-        self.q_mu = Parameter(q_mu, dtype=default_float())  # [M, P]
+        assert self.num_latent_gps == 2
+        self.q_mu_1 = Parameter(np.zeros((num_inducing, 1)), dtype=default_float())  # [M, 1]
+        self.q_mu_2 = Parameter(np.zeros((num_inducing, 1)), dtype=default_float())  # [M, 1]
 
         if q_sqrt is None:
             if self.q_diag:
                 ones = np.ones((num_inducing, self.num_latent_gps), dtype=default_float())
                 self.q_sqrt = Parameter(ones, transform=positive())  # [M, P]
             else:
-                q_sqrt = [
-                    np.eye(num_inducing, dtype=default_float()) for _ in range(self.num_latent_gps)
-                ]
-                q_sqrt = np.array(q_sqrt)
-                self.q_sqrt = Parameter(q_sqrt, transform=triangular())  # [P, M, M]
+                q_sqrt_1 = np.eye(num_inducing, dtype=default_float())
+                q_sqrt_2 = np.eye(num_inducing, dtype=default_float())
+                self.q_sqrt_1 = Parameter(q_sqrt_1, transform=triangular())  # [1, M, M]
+                self.q_sqrt_2 = Parameter(q_sqrt_2, transform=triangular())  # [1, M, M]
         else:
             if q_diag:
                 assert q_sqrt.ndim == 2
